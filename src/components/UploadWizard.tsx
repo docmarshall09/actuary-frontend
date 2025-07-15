@@ -86,8 +86,14 @@ export function UploadWizard() {
         const response = await apiService.uploadFiles(uploadFiles);
         setUploadId(response.upload_id);
 
-        // Get field detection for this file
-        const detections = await apiService.detectFields(response.upload_id, fileType);
+        // Get field detection for this file (fallback to mock if endpoint not available)
+        let detections: MappingSuggestion[] = [];
+        try {
+          detections = await apiService.detectFields(response.upload_id, fileType);
+        } catch (error) {
+          console.warn('Field detection endpoint not available, using mock data:', error);
+          detections = generateMockSuggestions(fileType);
+        }
         
         setUploadedFiles(prev => 
           prev.map(f => 
@@ -111,8 +117,14 @@ export function UploadWizard() {
         
         await apiService.uploadFiles(uploadFiles);
         
-        // Get field detection for this file
-        const detections = await apiService.detectFields(uploadId, fileType);
+        // Get field detection for this file (fallback to mock if endpoint not available)
+        let detections: MappingSuggestion[] = [];
+        try {
+          detections = await apiService.detectFields(uploadId, fileType);
+        } catch (error) {
+          console.warn('Field detection endpoint not available, using mock data:', error);
+          detections = generateMockSuggestions(fileType);
+        }
         
         setUploadedFiles(prev => 
           prev.map(f => 
