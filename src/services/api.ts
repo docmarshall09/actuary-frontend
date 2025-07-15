@@ -44,7 +44,12 @@ export const apiService = {
   },
 
   async detectFields(uploadId: string, fileType: string): Promise<DetectionResponse[]> {
-    const response = await fetch(`${API_BASE_URL}/api/detect/${uploadId}/${fileType}`);
+    const response = await fetch(`${API_BASE_URL}/api/detect/${uploadId}/${fileType}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
     
     if (!response.ok) {
       throw new Error(`Field detection failed: ${response.statusText}`);
