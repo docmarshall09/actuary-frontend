@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
+import { apiService } from '@/services/api';
 
 interface UploadedFile {
   id: string;
@@ -29,6 +30,7 @@ interface MappingSuggestion {
 
 interface MappingWizardProps {
   uploadedFiles: UploadedFile[];
+  uploadId: string | null;
   onComplete: (mappings: Record<string, any>) => void;
   onBack: () => void;
 }
@@ -156,7 +158,7 @@ function CanonicalFieldPillComponent({
   );
 }
 
-export function MappingWizard({ uploadedFiles, onComplete, onBack }: MappingWizardProps) {
+export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: MappingWizardProps) {
   const [fieldMappings, setFieldMappings] = useState<FieldMapping[]>(() => {
     // Initialize field mappings from uploaded files
     const mappings: FieldMapping[] = [];
@@ -286,7 +288,7 @@ export function MappingWizard({ uploadedFiles, onComplete, onBack }: MappingWiza
     (fieldMappings.filter(m => m.canonicalField).length / fieldMappings.length) * 100
   );
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!validationStatus.isValid) {
       toast({
         title: "Validation Failed",
@@ -296,20 +298,71 @@ export function MappingWizard({ uploadedFiles, onComplete, onBack }: MappingWiza
       return;
     }
 
-    const finalMappings = fieldMappings.reduce((acc, mapping) => {
-      if (mapping.canonicalField) {
-        acc[mapping.sourceField] = {
-          canonical_field: mapping.canonicalField,
-          file_type: mapping.fileType,
-          populated_pct: mapping.populated_pct,
-          detected_type: mapping.detected_type,
-          confidence: mapping.confidence
-        };
-      }
-      return acc;
-    }, {} as Record<string, any>);
+    if (!uploadId) {
+      toast({
+        title: "Upload ID Missing",
+        description: "No upload ID found. Please re-upload your files.",
+        variant: "destructive"
+      });
+      return;
+    }
 
-    onComplete(finalMappings);
+    try {
+      const finalMappings = fieldMappings.reduce((acc, mapping) => {
+        if (mapping.canonicalField) {
+          acc[mapping.sourceField] = {
+            canonical_field: mapping.canonicalField,
+            file_type: mapping.fileType,
+            populated_pct: mapping.populated_pct,
+            detected_type: mapping.detected_type,
+            confidence: mapping.confidence
+          };
+        }
+        return acc;
+      }, {} as Record<string, any>);
+
+      // Group mappings by file type for submission
+      const groupedMappings = fieldMappings.reduce((acc, mapping) => {
+        if (mapping.canonicalField) {
+          if (!acc[mapping.fileType]) {
+            acc[mapping.fileType] = {};
+          }
+          acc[mapping.fileType][mapping.sourceField] = {
+            canonical_field: mapping.canonicalField,
+            populated_pct: mapping.populated_pct,
+            detected_type: mapping.detected_type,
+            confidence: mapping.confidence
+          };
+        }
+        return acc;
+      }, {} as Record<string, Record<string, any>>);
+
+      // Submit mappings for each file type
+      const submissionPromises = Object.entries(groupedMappings).map(([fileType, mappings]) =>
+        apiService.submitMapping({
+          upload_id: uploadId,
+          file_type: fileType,
+          mappings
+        })
+      );
+
+      await Promise.all(submissionPromises);
+
+      toast({
+        title: "Mappings submitted successfully",
+        description: "Your field mappings have been processed and ETL job has been queued.",
+      });
+
+      onComplete(finalMappings);
+
+    } catch (error) {
+      console.error('Mapping submission error:', error);
+      toast({
+        title: "Submission failed",
+        description: error instanceof Error ? error.message : "An error occurred while submitting mappings.",
+        variant: "destructive"
+      });
+    }
   };
 
   const groupedMappings = fieldMappings.reduce((acc, mapping) => {

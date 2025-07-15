@@ -8,6 +8,7 @@ import { PreUploadChecklist } from './PreUploadChecklist';
 import { FileUploadZone } from './FileUploadZone';
 import { MappingWizard } from './MappingWizard';
 import { useToast } from '@/hooks/use-toast';
+import { apiService } from '@/services/api';
 
 type UploadStep = 'checklist' | 'upload' | 'mapping' | 'processing';
 
@@ -33,6 +34,7 @@ export function UploadWizard() {
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [processing, setProcessing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadId, setUploadId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const getStepProgress = () => {
@@ -71,31 +73,82 @@ export function UploadWizard() {
       return [...filtered, newFile];
     });
 
-    // Simulate file processing and field detection
-    setTimeout(() => {
-      setUploadedFiles(prev => 
-        prev.map(f => 
-          f.id === newFile.id 
-            ? { 
-                ...f, 
-                status: 'processing',
-                mappingSuggestions: generateMockSuggestions(fileType)
-              }
-            : f
-        )
-      );
-    }, 500);
+    try {
+      // Upload file if we don't have an upload_id yet, or if this is the first file
+      if (!uploadId) {
+        setUploadedFiles(prev => 
+          prev.map(f => f.id === newFile.id ? { ...f, status: 'processing' } : f)
+        );
 
-    setTimeout(() => {
+        const uploadFiles: { [key: string]: File } = {};
+        uploadFiles[fileType] = file;
+        
+        const response = await apiService.uploadFiles(uploadFiles);
+        setUploadId(response.upload_id);
+
+        // Get field detection for this file
+        const detections = await apiService.detectFields(response.upload_id, fileType);
+        
+        setUploadedFiles(prev => 
+          prev.map(f => 
+            f.id === newFile.id 
+              ? { 
+                  ...f, 
+                  status: 'completed',
+                  mappingSuggestions: detections
+                }
+              : f
+          )
+        );
+      } else {
+        // For subsequent files, upload individually
+        setUploadedFiles(prev => 
+          prev.map(f => f.id === newFile.id ? { ...f, status: 'processing' } : f)
+        );
+
+        const uploadFiles: { [key: string]: File } = {};
+        uploadFiles[fileType] = file;
+        
+        await apiService.uploadFiles(uploadFiles);
+        
+        // Get field detection for this file
+        const detections = await apiService.detectFields(uploadId, fileType);
+        
+        setUploadedFiles(prev => 
+          prev.map(f => 
+            f.id === newFile.id 
+              ? { 
+                  ...f, 
+                  status: 'completed',
+                  mappingSuggestions: detections
+                }
+              : f
+          )
+        );
+      }
+
+      toast({
+        title: "File uploaded successfully",
+        description: `${file.name} has been processed and is ready for mapping.`,
+      });
+
+    } catch (error) {
+      console.error('Upload error:', error);
       setUploadedFiles(prev => 
         prev.map(f => 
           f.id === newFile.id 
-            ? { ...f, status: 'completed' }
+            ? { ...f, status: 'error' }
             : f
         )
       );
-    }, 2000);
-  }, [toast]);
+      
+      toast({
+        title: "Upload failed",
+        description: error instanceof Error ? error.message : "An error occurred during upload.",
+        variant: "destructive"
+      });
+    }
+  }, [toast, uploadId]);
 
   const generateMockSuggestions = (fileType: string): MappingSuggestion[] => {
     // Mock field detection suggestions based on file type
@@ -126,16 +179,16 @@ export function UploadWizard() {
   };
 
   const canProceedToMapping = () => {
+    // Only require policy file now (claim/cancel optional)
     const hasPolicy = uploadedFiles.some(f => f.type === 'policy' && f.status === 'completed');
-    const hasClaim = uploadedFiles.some(f => f.type === 'claim' && f.status === 'completed');
-    return hasPolicy && hasClaim;
+    return hasPolicy;
   };
 
   const handleProceedToMapping = () => {
     if (!canProceedToMapping()) {
       toast({
         title: "Missing required files",
-        description: "Please upload both policy and claim files before proceeding.",
+        description: "Please upload at least a policy file before proceeding.",
         variant: "destructive"
       });
       return;
@@ -223,6 +276,7 @@ export function UploadWizard() {
           <div className="space-y-6">
             <MappingWizard 
               uploadedFiles={uploadedFiles}
+              uploadId={uploadId}
               onComplete={(mappings) => {
                 console.log('Mappings completed:', mappings);
                 setCurrentStep('processing');
