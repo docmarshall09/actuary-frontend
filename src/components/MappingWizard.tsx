@@ -704,9 +704,12 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
         </div>
 
       {/* Drag overlay */}
-      <DragOverlay dropAnimation={null}>
+      <DragOverlay dropAnimation={null} style={{ cursor: 'grabbing' }}>
         {activeId ? (
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border bg-background border-primary shadow-lg opacity-95">
+          <div 
+            className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border bg-background border-primary shadow-lg opacity-95 transform-none"
+            style={{ transform: 'rotate(2deg)' }}
+          >
             <GripVertical className="h-3 w-3 text-primary" />
             <span className="font-mono text-sm font-medium">
               {(availableFields.find(f => f.id === activeId) || allRequiredFields.find(f => f.id === activeId))?.name}
