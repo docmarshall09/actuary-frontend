@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { Upload, FileText, CheckCircle2, XCircle, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Upload, FileText, CheckCircle2, XCircle, AlertTriangle, ArrowRight, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +7,7 @@ import { Progress } from '@/components/ui/progress';
 import { PreUploadChecklist } from './PreUploadChecklist';
 import { FileUploadZone } from './FileUploadZone';
 import { MappingWizard } from './MappingWizard';
+import { FilePreviewModal } from './FilePreviewModal';
 import { useToast } from '@/hooks/use-toast';
 import { apiService } from '@/services/api';
 
@@ -35,6 +36,8 @@ export function UploadWizard() {
   const [processing, setProcessing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadId, setUploadId] = useState<string | null>(null);
+  const [previewFile, setPreviewFile] = useState<File | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const { toast } = useToast();
 
   const getStepProgress = () => {
@@ -109,10 +112,10 @@ export function UploadWizard() {
         const uploadFiles: { [key: string]: File } = {};
         uploadFiles[fileType] = file;
         
-        await apiService.uploadFiles(uploadFiles);
+        const response = await apiService.uploadFiles(uploadFiles);
         
         // Get field detection for this file
-        const detections = await apiService.detectFields(uploadId, fileType);
+        const detections = await apiService.detectFields(response.upload_id, fileType);
         
         setUploadedFiles(prev => 
           prev.map(f => 
@@ -234,18 +237,41 @@ export function UploadWizard() {
                 <CardContent>
                   <div className="space-y-3">
                     {uploadedFiles.map((file) => (
-                      <div key={file.id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div key={file.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors">
                         <div className="flex items-center gap-3">
                           <Badge variant={file.type === 'policy' ? 'default' : file.type === 'claim' ? 'secondary' : 'outline'}>
                             {file.type}
                           </Badge>
-                          <span className="font-medium">{file.name}</span>
+                          <span 
+                            className="font-medium cursor-pointer hover:text-primary transition-colors"
+                            onDoubleClick={() => {
+                              setPreviewFile(file.file);
+                              setPreviewOpen(true);
+                            }}
+                          >
+                            {file.name}
+                          </span>
+                          <span className="text-xs text-muted-foreground">Double-click to preview</span>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {file.status === 'pending' && <AlertTriangle className="h-4 w-4 text-warning" />}
-                          {file.status === 'processing' && <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />}
-                          {file.status === 'completed' && <CheckCircle2 className="h-4 w-4 text-success" />}
-                          {file.status === 'error' && <XCircle className="h-4 w-4 text-destructive" />}
+                        <div className="flex items-center gap-3">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setPreviewFile(file.file);
+                              setPreviewOpen(true);
+                            }}
+                            className="gap-2"
+                          >
+                            <Eye className="h-4 w-4" />
+                            Preview
+                          </Button>
+                          <div className="flex items-center gap-2">
+                            {file.status === 'pending' && <AlertTriangle className="h-4 w-4 text-warning" />}
+                            {file.status === 'processing' && <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />}
+                            {file.status === 'completed' && <CheckCircle2 className="h-4 w-4 text-success" />}
+                            {file.status === 'error' && <XCircle className="h-4 w-4 text-destructive" />}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -348,6 +374,16 @@ export function UploadWizard() {
           {renderStepContent()}
         </CardContent>
       </Card>
+
+      {/* File Preview Modal */}
+      <FilePreviewModal 
+        file={previewFile}
+        isOpen={previewOpen}
+        onClose={() => {
+          setPreviewOpen(false);
+          setPreviewFile(null);
+        }}
+      />
     </div>
   );
 }

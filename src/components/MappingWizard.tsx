@@ -1,9 +1,9 @@
 import React, { useState, useCallback } from 'react';
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useSensor, useSensors, PointerSensor, DragOverEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ArrowRight, ArrowLeft, GripVertical, CheckCircle2, AlertTriangle, X } from 'lucide-react';
+import { ArrowRight, ArrowLeft, GripVertical, CheckCircle2, AlertTriangle, X, Target } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -118,24 +118,24 @@ function CanonicalFieldPillComponent({
 }) {
   const getTypeColor = (type: string) => {
     switch (type) {
-      case 'string': return 'bg-blue-100 text-blue-800';
-      case 'date': return 'bg-green-100 text-green-800';
-      case 'decimal': return 'bg-purple-100 text-purple-800';
-      case 'integer': return 'bg-orange-100 text-orange-800';
-      case 'enum': return 'bg-pink-100 text-pink-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'string': return 'bg-blue-500/10 text-blue-700 border-blue-500/20';
+      case 'date': return 'bg-green-500/10 text-green-700 border-green-500/20';
+      case 'decimal': return 'bg-purple-500/10 text-purple-700 border-purple-500/20';
+      case 'integer': return 'bg-orange-500/10 text-orange-700 border-orange-500/20';
+      case 'enum': return 'bg-pink-500/10 text-pink-700 border-pink-500/20';
+      default: return 'bg-gray-500/10 text-gray-700 border-gray-500/20';
     }
   };
 
   return (
-    <div className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg border cursor-move transition-all ${
+    <div className={`group relative inline-flex items-center gap-2 px-3 py-2 rounded-lg border-2 cursor-grab active:cursor-grabbing transition-all ${
       mapped 
-        ? 'bg-primary text-primary-foreground border-primary shadow-sm' 
-        : 'bg-background border-border hover:border-primary/50'
+        ? 'bg-primary/10 text-primary border-primary shadow-sm scale-105' 
+        : 'bg-background border-border hover:border-primary/50 hover:shadow-md'
     }`}>
-      <GripVertical className="h-3 w-3" />
-      <span className="font-mono text-sm">{field.name}</span>
-      <Badge className={`text-xs ${getTypeColor(field.type)}`}>
+      <GripVertical className="h-3 w-3 text-muted-foreground group-hover:text-primary transition-colors" />
+      <span className="font-mono text-sm font-medium">{field.name}</span>
+      <Badge className={`text-xs border ${getTypeColor(field.type)}`} variant="outline">
         {field.type}
       </Badge>
       {field.required && (
@@ -145,7 +145,7 @@ function CanonicalFieldPillComponent({
         <Button
           variant="ghost"
           size="sm"
-          className="h-4 w-4 p-0 hover:bg-primary-foreground/20"
+          className="h-5 w-5 p-0 ml-1 opacity-0 group-hover:opacity-100 hover:bg-primary-foreground/20 transition-all"
           onClick={(e) => {
             e.stopPropagation();
             onRemove();
@@ -191,6 +191,7 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
   });
 
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
   const { toast } = useToast();
   
   const sensors = useSensors(
@@ -205,24 +206,36 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
     setActiveId(event.active.id as string);
   };
 
+  const handleDragOver = (event: DragOverEvent) => {
+    const { over } = event;
+    setDragOverTarget(over?.id as string || null);
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
+    setDragOverTarget(null);
 
     if (!over) return;
 
     const activeField = availableFields.find(f => f.id === active.id);
     const targetSourceField = over.id as string;
 
-    if (activeField && targetSourceField) {
+    if (activeField && targetSourceField && targetSourceField.startsWith('source-')) {
+      const actualSourceField = targetSourceField.replace('source-', '');
       // Update field mapping
       setFieldMappings(prev => 
         prev.map(mapping => 
-          mapping.sourceField === targetSourceField
+          mapping.sourceField === actualSourceField
             ? { ...mapping, canonicalField: activeField.name }
             : mapping
         )
       );
+      
+      toast({
+        title: "Field mapped",
+        description: `Mapped "${actualSourceField}" to "${activeField.name}"`,
+      });
     }
   };
 
@@ -377,6 +390,7 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
     <DndContext
       sensors={sensors}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
       <div className="space-y-6">
@@ -431,11 +445,17 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
         {/* Mapping Interface */}
         <div className="grid gap-6 lg:grid-cols-4">
           {/* Available Fields Panel */}
-          <Card className="lg:col-span-1">
-            <CardHeader>
-              <CardTitle className="text-sm">Available Fields</CardTitle>
+          <Card className="lg:col-span-1 border-2 border-dashed border-primary/20">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Target className="h-5 w-5 text-primary" />
+                Available Fields
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Drag these fields to map your data
+              </p>
             </CardHeader>
-            <CardContent className="space-y-2">
+            <CardContent className="space-y-3">
               <SortableContext items={availableFields.map(f => f.id)} strategy={verticalListSortingStrategy}>
                 {availableFields.map(field => (
                   <SortableItem key={field.id} id={field.id}>
@@ -471,48 +491,61 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
                       return (
                         <div 
                           key={mapping.sourceField}
-                          className={`p-4 border rounded-lg transition-all ${
-                            isRequired && !isMapped ? 'border-destructive bg-destructive/5' : 'border-border'
+                          id={`source-${mapping.sourceField}`}
+                          className={`p-4 border-2 rounded-lg transition-all ${
+                            isRequired && !isMapped 
+                              ? 'border-destructive bg-destructive/5' 
+                              : dragOverTarget === `source-${mapping.sourceField}`
+                              ? 'border-primary bg-primary/10 shadow-lg'
+                              : isMapped
+                              ? 'border-success bg-success/5'
+                              : 'border-dashed border-border hover:border-primary/50'
                           }`}
                         >
                           <div className="flex items-center justify-between gap-4">
                             <div className="flex-1">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 mb-2">
                                 <span className="font-mono text-sm font-medium">
                                   {mapping.sourceField}
                                 </span>
                                 {isRequired && (
                                   <Badge variant="destructive" className="text-xs">Required</Badge>
                                 )}
+                                <Badge variant="outline" className="text-xs">
+                                  {mapping.detected_type}
+                                </Badge>
+                                <Badge variant="outline" className="text-xs">
+                                  {mapping.populated_pct.toFixed(1)}% populated
+                                </Badge>
+                                <Badge 
+                                  variant={mapping.confidence >= 0.8 ? "default" : mapping.confidence >= 0.6 ? "secondary" : "destructive"}
+                                  className="text-xs"
+                                >
+                                  {Math.round(mapping.confidence * 100)}% confidence
+                                </Badge>
                               </div>
-                              <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
-                                <span>{mapping.populated_pct.toFixed(1)}% populated</span>
-                                <span>{mapping.detected_type}</span>
-                                <span>Confidence: {(mapping.confidence * 100).toFixed(0)}%</span>
+                              
+                              <div 
+                                className={`min-h-[60px] border-2 border-dashed rounded-lg p-3 flex items-center justify-center transition-all ${
+                                  dragOverTarget === `source-${mapping.sourceField}`
+                                    ? 'border-primary bg-primary/20'
+                                    : mappedField
+                                    ? 'border-success bg-success/10'
+                                    : 'border-muted-foreground/30 hover:border-primary/50'
+                                }`}
+                              >
+                                {mappedField ? (
+                                  <CanonicalFieldPillComponent 
+                                    field={mappedField} 
+                                    mapped={true}
+                                    onRemove={() => removeMapping(mapping.sourceField)}
+                                  />
+                                ) : (
+                                  <span className="text-sm text-muted-foreground text-center">
+                                    Drop a canonical field here to map
+                                  </span>
+                                )}
                               </div>
-                            </div>
-                            
-                            <ArrowRight className="h-4 w-4 text-muted-foreground" />
-                            
-                            <div 
-                              className="flex-1 min-h-[60px] border-2 border-dashed border-border rounded-lg p-2 flex items-center justify-center transition-all hover:border-primary/50"
-                              onDragOver={(e) => e.preventDefault()}
-                              onDrop={(e) => {
-                                e.preventDefault();
-                                // Handle drop logic if needed
-                              }}
-                            >
-                              {mappedField ? (
-                                <CanonicalFieldPillComponent 
-                                  field={mappedField} 
-                                  mapped={true}
-                                  onRemove={() => removeMapping(mapping.sourceField)}
-                                />
-                              ) : (
-                                <span className="text-sm text-muted-foreground">
-                                  Drop canonical field here
-                                </span>
-                              )}
                             </div>
                           </div>
                         </div>
