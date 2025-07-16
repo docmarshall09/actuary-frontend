@@ -168,9 +168,12 @@ function DroppableZone({
   children: React.ReactNode; 
   isOver: boolean;
 }) {
+  const { setNodeRef } = useSortable({ id });
+  
   return (
     <div 
-      className={`min-h-[60px] border-2 border-dashed rounded-lg p-3 flex items-center justify-center transition-all ${
+      ref={setNodeRef}
+      className={`min-h-[60px] w-full border-2 border-dashed rounded-lg p-3 flex items-center justify-center transition-all ${
         isOver
           ? 'border-primary bg-primary/20 shadow-lg'
           : 'border-muted-foreground/30 hover:border-primary/50'
@@ -206,10 +209,25 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
   });
 
   const [availableFields, setAvailableFields] = useState<CanonicalFieldPill[]>(() => {
-    // Filter available fields based on uploaded file types
+    // Filter available fields: only required fields that aren't already auto-mapped
     const fileTypes = uploadedFiles.map(f => f.type);
+    const autoMappedFields = new Set<string>();
+    
+    // Collect auto-mapped canonical fields
+    uploadedFiles.forEach(file => {
+      if (file.mappingSuggestions) {
+        file.mappingSuggestions.forEach(suggestion => {
+          if (suggestion.suggested_canonical) {
+            autoMappedFields.add(suggestion.suggested_canonical);
+          }
+        });
+      }
+    });
+    
     return allCanonicalFields.filter(field => 
-      fileTypes.includes(field.fileType as 'policy' | 'claim' | 'cancel')
+      fileTypes.includes(field.fileType as 'policy' | 'claim' | 'cancel') &&
+      field.required &&
+      !autoMappedFields.has(field.name)
     );
   });
 
@@ -609,19 +627,21 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
 
                             {/* Drop zone */}
                             <div className="flex-1">
-                              <DroppableZone id={mapping.sourceField} isOver={isOver}>
-                                {mappedField ? (
-                                  <CanonicalFieldPillComponent 
-                                    field={mappedField} 
-                                    mapped={true}
-                                    onRemove={() => removeMapping(mapping.sourceField)}
-                                  />
-                                ) : (
-                                  <span className="text-sm text-muted-foreground text-center">
-                                    Drop canonical field here
-                                  </span>
-                                )}
-                              </DroppableZone>
+                              <SortableContext items={[mapping.sourceField]} strategy={verticalListSortingStrategy}>
+                                <DroppableZone id={mapping.sourceField} isOver={isOver}>
+                                  {mappedField ? (
+                                    <CanonicalFieldPillComponent 
+                                      field={mappedField} 
+                                      mapped={true}
+                                      onRemove={() => removeMapping(mapping.sourceField)}
+                                    />
+                                  ) : (
+                                    <span className="text-sm text-muted-foreground text-center">
+                                      Drop canonical field here
+                                    </span>
+                                  )}
+                                </DroppableZone>
+                              </SortableContext>
                             </div>
                           </div>
                         </div>
