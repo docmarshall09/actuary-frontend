@@ -231,6 +231,12 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
     );
   });
 
+  // Keep track of all required fields for mapping display
+  const allRequiredFields = allCanonicalFields.filter(field => {
+    const fileTypes = uploadedFiles.map(f => f.type);
+    return fileTypes.includes(field.fileType as 'policy' | 'claim' | 'cancel') && field.required;
+  });
+
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
   const [showFieldDefinitions, setShowFieldDefinitions] = useState(false);
@@ -260,10 +266,20 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
 
     if (!over) return;
 
-    const activeField = availableFields.find(f => f.id === active.id);
+    const activeField = availableFields.find(f => f.id === active.id) || 
+                       allRequiredFields.find(f => f.id === active.id);
     const targetSourceField = over.id as string;
 
     if (activeField && targetSourceField) {
+      // Check if we're removing a previous mapping to add it back to available fields
+      const existingMapping = fieldMappings.find(m => m.sourceField === targetSourceField);
+      if (existingMapping?.canonicalField) {
+        const oldCanonicalField = allRequiredFields.find(f => f.name === existingMapping.canonicalField);
+        if (oldCanonicalField && !availableFields.find(f => f.id === oldCanonicalField.id)) {
+          setAvailableFields(prev => [...prev, oldCanonicalField]);
+        }
+      }
+
       // Update field mapping
       setFieldMappings(prev => 
         prev.map(mapping => 
@@ -273,7 +289,7 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
         )
       );
       
-      // Remove the mapped field from available fields
+      // Remove the newly mapped field from available fields
       setAvailableFields(prev => prev.filter(f => f.id !== activeField.id));
       
       toast({
@@ -306,7 +322,7 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
     const mapping = fieldMappings.find(m => m.sourceField === sourceField);
     if (!mapping?.canonicalField) return null;
     
-    return availableFields.find(f => f.name === mapping.canonicalField);
+    return allRequiredFields.find(f => f.name === mapping.canonicalField);
   };
 
   const getValidationStatus = () => {
@@ -640,19 +656,21 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
                             {/* Drop zone */}
                             <div className="flex-1">
                               <SortableContext items={[mapping.sourceField]} strategy={verticalListSortingStrategy}>
-                                <DroppableZone id={mapping.sourceField} isOver={isOver}>
-                                  {mappedField ? (
-                                    <CanonicalFieldPillComponent 
-                                      field={mappedField} 
-                                      mapped={true}
-                                      onRemove={() => removeMapping(mapping.sourceField)}
-                                    />
-                                  ) : (
-                                    <span className="text-sm text-muted-foreground text-center">
-                                      Drop canonical field here
-                                    </span>
-                                  )}
-                                </DroppableZone>
+                                 <DroppableZone id={mapping.sourceField} isOver={isOver}>
+                                   {mappedField ? (
+                                     <SortableItem id={`mapped-${mappedField.id}-${mapping.sourceField}`}>
+                                       <CanonicalFieldPillComponent 
+                                         field={mappedField} 
+                                         mapped={true}
+                                         onRemove={() => removeMapping(mapping.sourceField)}
+                                       />
+                                     </SortableItem>
+                                   ) : (
+                                     <span className="text-sm text-muted-foreground text-center">
+                                       Drop canonical field here
+                                     </span>
+                                   )}
+                                 </DroppableZone>
                               </SortableContext>
                             </div>
                           </div>
@@ -688,11 +706,12 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
       {/* Drag overlay */}
       <DragOverlay dropAnimation={null}>
         {activeId ? (
-          <div className="opacity-90 transform rotate-3 shadow-lg">
-            <CanonicalFieldPillComponent 
-              field={availableFields.find(f => f.id === activeId)!} 
-              mapped={false}
-            />
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-md border bg-background border-primary shadow-lg opacity-95">
+            <GripVertical className="h-3 w-3 text-primary" />
+            <span className="font-mono text-sm font-medium">
+              {(availableFields.find(f => f.id === activeId) || allRequiredFields.find(f => f.id === activeId))?.name}
+            </span>
+            <Badge variant="destructive" className="text-xs">Required</Badge>
           </div>
         ) : null}
       </DragOverlay>
