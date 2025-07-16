@@ -273,6 +273,9 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
         )
       );
       
+      // Remove the mapped field from available fields
+      setAvailableFields(prev => prev.filter(f => f.id !== activeField.id));
+      
       toast({
         title: "Field mapped",
         description: `Mapped "${targetSourceField}" to "${activeField.name}"`,
@@ -281,6 +284,15 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
   };
 
   const removeMapping = (sourceField: string) => {
+    const mapping = fieldMappings.find(m => m.sourceField === sourceField);
+    if (mapping?.canonicalField) {
+      // Find the canonical field to add back to available fields
+      const canonicalField = allCanonicalFields.find(f => f.name === mapping.canonicalField);
+      if (canonicalField && canonicalField.required) {
+        setAvailableFields(prev => [...prev, canonicalField]);
+      }
+    }
+    
     setFieldMappings(prev => 
       prev.map(mapping => 
         mapping.sourceField === sourceField
@@ -674,9 +686,9 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
         </div>
 
       {/* Drag overlay */}
-      <DragOverlay>
+      <DragOverlay dropAnimation={null}>
         {activeId ? (
-          <div className="opacity-80">
+          <div className="opacity-90 transform rotate-3 shadow-lg">
             <CanonicalFieldPillComponent 
               field={availableFields.find(f => f.id === activeId)!} 
               mapped={false}
