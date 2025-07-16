@@ -3,7 +3,7 @@ import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useSensor, useSe
 import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ArrowRight, ArrowLeft, GripVertical, CheckCircle2, AlertTriangle, X, Target } from 'lucide-react';
+import { ArrowRight, ArrowLeft, GripVertical, CheckCircle2, AlertTriangle, X, Target, ChevronDown } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -215,6 +215,7 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
+  const [showFieldDefinitions, setShowFieldDefinitions] = useState(false);
   const { toast } = useToast();
   
   const sensors = useSensors(
@@ -417,11 +418,61 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
       onDragEnd={handleDragEnd}
     >
       <div className="space-y-6">
-        <div className="text-center space-y-2">
+        <div className="text-center space-y-4">
           <h2 className="text-2xl font-semibold">Field Mapping</h2>
           <p className="text-muted-foreground">
             Drag canonical fields from the left panel to map your source fields
           </p>
+          
+          {/* Field Definitions Toggle */}
+          <div className="max-w-2xl mx-auto">
+            <Button
+              variant="outline"
+              onClick={() => setShowFieldDefinitions(!showFieldDefinitions)}
+              className="flex items-center gap-2 mb-4"
+            >
+              <ChevronDown className={`h-4 w-4 transition-transform ${showFieldDefinitions ? 'rotate-180' : ''}`} />
+              Field Definitions
+            </Button>
+            
+            {showFieldDefinitions && (
+              <Card className="mb-4">
+                <CardContent className="pt-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
+                    <div>
+                      <h4 className="font-medium mb-2">Policy Fields</h4>
+                      <ul className="text-sm text-muted-foreground space-y-1">
+                        <li><code>policy_number</code> - Unique policy identifier</li>
+                        <li><code>effective_date</code> - When policy starts</li>
+                        <li><code>expiration_date</code> - When policy ends</li>
+                        <li><code>premium_written</code> - Premium amount</li>
+                        <li><code>product_type</code> - Type of insurance product</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-medium mb-2">Claim Fields</h4>
+                      <ul className="text-sm text-muted-foreground space-y-1">
+                        <li><code>claim_number</code> - Unique claim identifier</li>
+                        <li><code>policy_number</code> - Associated policy</li>
+                        <li><code>paid_date</code> - When claim was paid</li>
+                        <li><code>report_date</code> - When claim was reported</li>
+                        <li><code>paid_amount</code> - Amount paid</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <h4 className="font-medium mb-2">Cancel Fields</h4>
+                      <ul className="text-sm text-muted-foreground space-y-1">
+                        <li><code>policy_number</code> - Policy to cancel</li>
+                        <li><code>cancel_date</code> - When cancelled</li>
+                        <li><code>refund_premium</code> - Refund amount</li>
+                      </ul>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+          
           <div className="max-w-md mx-auto space-y-2">
             <Progress value={completionPercentage} className="w-full" />
             <p className="text-sm text-muted-foreground">
@@ -466,36 +517,40 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
         )}
 
         {/* Mapping Interface */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          {/* Available Fields Panel */}
-          <div className="lg:col-span-3">
-            <Card className="h-fit">
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Target className="h-5 w-5 text-primary" />
-                  Available Fields
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Drag these to map your data
-                </p>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <SortableContext items={availableFields.map(f => f.id)} strategy={verticalListSortingStrategy}>
-                  {availableFields.map(field => (
-                    <SortableItem key={field.id} id={field.id}>
-                      <CanonicalFieldPillComponent 
-                        field={field} 
-                        mapped={false}
-                      />
-                    </SortableItem>
-                  ))}
-                </SortableContext>
-              </CardContent>
-            </Card>
-          </div>
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-12 gap-8">
+            {/* Available Fields Panel */}
+            <div className="col-span-4">
+              <Card className="h-fit">
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Target className="h-5 w-5 text-primary" />
+                    Available Fields
+                  </CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Drag these to map your data
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <SortableContext items={availableFields.map(f => f.id)} strategy={verticalListSortingStrategy}>
+                    {availableFields.map(field => (
+                      <SortableItem key={field.id} id={field.id}>
+                        <div className="group relative inline-flex items-center gap-2 px-3 py-1.5 rounded-md border cursor-grab active:cursor-grabbing transition-all bg-background border-border hover:border-primary/50 hover:shadow-sm">
+                          <GripVertical className="h-3 w-3 text-muted-foreground group-hover:text-primary transition-colors" />
+                          <span className="font-mono text-sm font-medium">{field.name}</span>
+                          {field.required && (
+                            <Badge variant="destructive" className="text-xs">Required</Badge>
+                          )}
+                        </div>
+                      </SortableItem>
+                    ))}
+                  </SortableContext>
+                </CardContent>
+              </Card>
+            </div>
 
-          {/* Mapping Panels */}
-          <div className="lg:col-span-9 space-y-6">
+            {/* Mapping Panels */}
+            <div className="col-span-8 space-y-6">
             {Object.entries(groupedMappings).map(([fileType, mappings]) => (
               <Card key={fileType}>
                 <CardHeader>
@@ -594,8 +649,9 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
             <CheckCircle2 className="h-4 w-4" />
             Submit Mapping
           </Button>
+            </div>
+          </div>
         </div>
-      </div>
 
       {/* Drag overlay */}
       <DragOverlay>
