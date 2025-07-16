@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useSensor, useSensors, PointerSensor, DragOverEvent } from '@dnd-kit/core';
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useSensor, useSensors, PointerSensor, DragOverEvent, closestCenter } from '@dnd-kit/core';
 import { SortableContext, arrayMove, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -128,9 +128,9 @@ function CanonicalFieldPillComponent({
   };
 
   return (
-    <div className={`group relative inline-flex items-center gap-2 px-3 py-2 rounded-lg border-2 cursor-grab active:cursor-grabbing transition-all ${
+    <div className={`group relative inline-flex items-center gap-2 px-3 py-2 rounded-lg border cursor-grab active:cursor-grabbing transition-all ${
       mapped 
-        ? 'bg-primary/10 text-primary border-primary shadow-sm scale-105' 
+        ? 'bg-primary/10 text-primary border-primary shadow-sm' 
         : 'bg-background border-border hover:border-primary/50 hover:shadow-md'
     }`}>
       <GripVertical className="h-3 w-3 text-muted-foreground group-hover:text-primary transition-colors" />
@@ -154,6 +154,29 @@ function CanonicalFieldPillComponent({
           <X className="h-3 w-3" />
         </Button>
       )}
+    </div>
+  );
+}
+
+// Droppable zone component
+function DroppableZone({ 
+  id, 
+  children, 
+  isOver 
+}: { 
+  id: string; 
+  children: React.ReactNode; 
+  isOver: boolean;
+}) {
+  return (
+    <div 
+      className={`min-h-[60px] border-2 border-dashed rounded-lg p-3 flex items-center justify-center transition-all ${
+        isOver
+          ? 'border-primary bg-primary/20 shadow-lg'
+          : 'border-muted-foreground/30 hover:border-primary/50'
+      }`}
+    >
+      {children}
     </div>
   );
 }
@@ -191,7 +214,7 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
   });
 
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [dragOverTarget, setDragOverTarget] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
   const { toast } = useToast();
   
   const sensors = useSensors(
@@ -208,25 +231,24 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
 
   const handleDragOver = (event: DragOverEvent) => {
     const { over } = event;
-    setDragOverTarget(over?.id as string || null);
+    setOverId(over?.id as string || null);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveId(null);
-    setDragOverTarget(null);
+    setOverId(null);
 
     if (!over) return;
 
     const activeField = availableFields.find(f => f.id === active.id);
     const targetSourceField = over.id as string;
 
-    if (activeField && targetSourceField && targetSourceField.startsWith('source-')) {
-      const actualSourceField = targetSourceField.replace('source-', '');
+    if (activeField && targetSourceField) {
       // Update field mapping
       setFieldMappings(prev => 
         prev.map(mapping => 
-          mapping.sourceField === actualSourceField
+          mapping.sourceField === targetSourceField
             ? { ...mapping, canonicalField: activeField.name }
             : mapping
         )
@@ -234,7 +256,7 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
       
       toast({
         title: "Field mapped",
-        description: `Mapped "${actualSourceField}" to "${activeField.name}"`,
+        description: `Mapped "${targetSourceField}" to "${activeField.name}"`,
       });
     }
   };
@@ -389,15 +411,16 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
   return (
     <DndContext
       sensors={sensors}
+      collisionDetection={closestCenter}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
       <div className="space-y-6">
         <div className="text-center space-y-2">
-          <h2 className="text-xl font-semibold">Field Mapping</h2>
+          <h2 className="text-2xl font-semibold">Field Mapping</h2>
           <p className="text-muted-foreground">
-            Drag canonical field pills to map your source fields
+            Drag canonical fields from the left panel to map your source fields
           </p>
           <div className="max-w-md mx-auto space-y-2">
             <Progress value={completionPercentage} className="w-full" />
@@ -443,34 +466,36 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
         )}
 
         {/* Mapping Interface */}
-        <div className="grid gap-6 lg:grid-cols-4">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Available Fields Panel */}
-          <Card className="lg:col-span-1 border-2 border-dashed border-primary/20">
-            <CardHeader className="pb-4">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Target className="h-5 w-5 text-primary" />
-                Available Fields
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Drag these fields to map your data
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <SortableContext items={availableFields.map(f => f.id)} strategy={verticalListSortingStrategy}>
-                {availableFields.map(field => (
-                  <SortableItem key={field.id} id={field.id}>
-                    <CanonicalFieldPillComponent 
-                      field={field} 
-                      mapped={false}
-                    />
-                  </SortableItem>
-                ))}
-              </SortableContext>
-            </CardContent>
-          </Card>
+          <div className="lg:col-span-3">
+            <Card className="h-fit">
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Target className="h-5 w-5 text-primary" />
+                  Available Fields
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Drag these to map your data
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <SortableContext items={availableFields.map(f => f.id)} strategy={verticalListSortingStrategy}>
+                  {availableFields.map(field => (
+                    <SortableItem key={field.id} id={field.id}>
+                      <CanonicalFieldPillComponent 
+                        field={field} 
+                        mapped={false}
+                      />
+                    </SortableItem>
+                  ))}
+                </SortableContext>
+              </CardContent>
+            </Card>
+          </div>
 
           {/* Mapping Panels */}
-          <div className="lg:col-span-3 space-y-6">
+          <div className="lg:col-span-9 space-y-6">
             {Object.entries(groupedMappings).map(([fileType, mappings]) => (
               <Card key={fileType}>
                 <CardHeader>
@@ -482,27 +507,26 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {mappings.map((mapping) => {
                       const mappedField = getMappedField(mapping.sourceField);
                       const isRequired = mapping.required;
                       const isMapped = mapping.canonicalField !== null;
+                      const isOver = overId === mapping.sourceField;
                       
                       return (
                         <div 
                           key={mapping.sourceField}
-                          id={`source-${mapping.sourceField}`}
                           className={`p-4 border-2 rounded-lg transition-all ${
                             isRequired && !isMapped 
                               ? 'border-destructive bg-destructive/5' 
-                              : dragOverTarget === `source-${mapping.sourceField}`
-                              ? 'border-primary bg-primary/10 shadow-lg'
                               : isMapped
                               ? 'border-success bg-success/5'
-                              : 'border-dashed border-border hover:border-primary/50'
+                              : 'border-border'
                           }`}
                         >
-                          <div className="flex items-center justify-between gap-4">
+                          <div className="flex items-start gap-4">
+                            {/* Source field info */}
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-2">
                                 <span className="font-mono text-sm font-medium">
@@ -524,16 +548,13 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
                                   {Math.round(mapping.confidence * 100)}% confidence
                                 </Badge>
                               </div>
-                              
-                              <div 
-                                className={`min-h-[60px] border-2 border-dashed rounded-lg p-3 flex items-center justify-center transition-all ${
-                                  dragOverTarget === `source-${mapping.sourceField}`
-                                    ? 'border-primary bg-primary/20'
-                                    : mappedField
-                                    ? 'border-success bg-success/10'
-                                    : 'border-muted-foreground/30 hover:border-primary/50'
-                                }`}
-                              >
+                            </div>
+
+                            <ArrowRight className="h-4 w-4 text-muted-foreground mt-2" />
+
+                            {/* Drop zone */}
+                            <div className="flex-1">
+                              <DroppableZone id={mapping.sourceField} isOver={isOver}>
                                 {mappedField ? (
                                   <CanonicalFieldPillComponent 
                                     field={mappedField} 
@@ -542,10 +563,10 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
                                   />
                                 ) : (
                                   <span className="text-sm text-muted-foreground text-center">
-                                    Drop a canonical field here to map
+                                    Drop canonical field here
                                   </span>
                                 )}
-                              </div>
+                              </DroppableZone>
                             </div>
                           </div>
                         </div>
@@ -558,40 +579,33 @@ export function MappingWizard({ uploadedFiles, uploadId, onComplete, onBack }: M
           </div>
         </div>
 
-        {/* Actions */}
+        {/* Action buttons */}
         <div className="flex justify-between">
-          <Button variant="outline" onClick={onBack}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
+          <Button variant="outline" onClick={onBack} className="gap-2">
+            <ArrowLeft className="h-4 w-4" />
             Back to Upload
           </Button>
           
           <Button 
-            variant="professional" 
             onClick={handleSubmit}
             disabled={!validationStatus.isValid}
             className="gap-2"
           >
-            {validationStatus.isValid ? (
-              <>
-                <CheckCircle2 className="h-4 w-4" />
-                Submit Mapping
-              </>
-            ) : (
-              <>
-                <AlertTriangle className="h-4 w-4" />
-                Fix Errors to Continue
-              </>
-            )}
+            <CheckCircle2 className="h-4 w-4" />
+            Submit Mapping
           </Button>
         </div>
       </div>
 
+      {/* Drag overlay */}
       <DragOverlay>
         {activeId ? (
-          <CanonicalFieldPillComponent 
-            field={availableFields.find(f => f.id === activeId)!} 
-            mapped={false}
-          />
+          <div className="opacity-80">
+            <CanonicalFieldPillComponent 
+              field={availableFields.find(f => f.id === activeId)!} 
+              mapped={false}
+            />
+          </div>
         ) : null}
       </DragOverlay>
     </DndContext>
