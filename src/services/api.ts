@@ -23,6 +23,20 @@ export interface MappingResponse {
   message: string;
 }
 
+export interface JobStatus {
+  file_type: string;
+  status: 'done' | 'running' | 'queued' | 'failed';
+  progress: number;
+  message: string;
+  updated_at: string;
+}
+
+export interface StatusResponse {
+  upload_id: string;
+  jobs: JobStatus[];
+  overall: 'done' | 'running' | 'failed' | 'pending' | 'unknown';
+}
+
 export const apiService = {
   async uploadFiles(files: { policy?: File; claim?: File; cancel?: File }): Promise<UploadResponse> {
     const formData = new FormData();
@@ -72,5 +86,41 @@ export const apiService = {
     }
 
     return response.json();
+  },
+
+  async getStatus(uploadId: string): Promise<StatusResponse> {
+    const response = await fetch(`${API_BASE_URL}/api/status/${uploadId}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Status check failed: ${response.statusText}`);
+    }
+
+    return response.json();
+  },
+
+  async pollStatus(uploadId: string, onUpdate?: (status: StatusResponse) => void): Promise<StatusResponse> {
+    return new Promise((resolve, reject) => {
+      const poll = async () => {
+        try {
+          const status = await this.getStatus(uploadId);
+          onUpdate?.(status);
+          
+          if (status.overall === 'done' || status.overall === 'failed') {
+            resolve(status);
+          } else {
+            setTimeout(poll, 2000); // Poll every 2 seconds
+          }
+        } catch (error) {
+          reject(error);
+        }
+      };
+      
+      poll();
+    });
   },
 };

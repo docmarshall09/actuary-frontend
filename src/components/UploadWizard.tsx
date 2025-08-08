@@ -9,9 +9,10 @@ import { FileUploadZone } from './FileUploadZone';
 import { SimpleMappingWizard } from './SimpleMappingWizard';
 import { FilePreviewModal } from './FilePreviewModal';
 import { useToast } from '@/hooks/use-toast';
-import { apiService } from '@/services/api';
+import { apiService, StatusResponse, JobStatus } from '@/services/api';
+import { ProcessingStatus } from './ProcessingStatus';
 
-type UploadStep = 'checklist' | 'upload' | 'mapping' | 'processing';
+type UploadStep = 'checklist' | 'upload' | 'mapping' | 'processing' | 'complete';
 
 interface UploadedFile {
   id: string;
@@ -38,12 +39,44 @@ export function UploadWizard() {
   const [uploadId, setUploadId] = useState<string | null>(null);
   const [previewFile, setPreviewFile] = useState<File | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [jobStatuses, setJobStatuses] = useState<JobStatus[]>([]);
+  const [overallStatus, setOverallStatus] = useState<string>('pending');
   const { toast } = useToast();
 
   const getStepProgress = () => {
-    const steps = ['checklist', 'upload', 'mapping', 'processing'];
+    const steps = ['checklist', 'upload', 'mapping', 'processing', 'complete'];
     return ((steps.indexOf(currentStep) + 1) / steps.length) * 100;
   };
+
+  const startStatusPolling = useCallback(async (uploadId: string) => {
+    try {
+      await apiService.pollStatus(uploadId, (status: StatusResponse) => {
+        setJobStatuses(status.jobs);
+        setOverallStatus(status.overall);
+        
+        if (status.overall === 'done') {
+          setCurrentStep('complete');
+          toast({
+            title: "Processing Complete",
+            description: "All files have been processed successfully!",
+          });
+        } else if (status.overall === 'failed') {
+          toast({
+            title: "Processing Failed",
+            description: "Some files failed to process. Please check the details below.",
+            variant: "destructive"
+          });
+        }
+      });
+    } catch (error) {
+      console.error('Status polling error:', error);
+      toast({
+        title: "Status Check Failed",
+        description: "Unable to check processing status. Please refresh the page.",
+        variant: "destructive"
+      });
+    }
+  }, [toast]);
 
   const handleFileUpload = useCallback(async (files: FileList, fileType: 'policy' | 'claim' | 'cancel') => {
     const file = files[0];
@@ -306,6 +339,13 @@ export function UploadWizard() {
               onComplete={(mappings) => {
                 console.log('Mappings completed:', mappings);
                 setCurrentStep('processing');
+                toast({
+                  title: "Mappings Saved",
+                  description: "Transform started. Please wait while files are processed...",
+                });
+                if (uploadId) {
+                  startStatusPolling(uploadId);
+                }
               }}
               onBack={() => setCurrentStep('upload')}
             />
@@ -314,24 +354,31 @@ export function UploadWizard() {
 
       case 'processing':
         return (
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Processing Files</CardTitle>
-                <CardDescription>
-                  Your files are being processed and validated. This may take a few moments.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <Progress value={uploadProgress} className="w-full" />
-                  <p className="text-sm text-muted-foreground text-center">
-                    Processing files and running validation...
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+          <ProcessingStatus
+            jobs={jobStatuses}
+            overall={overallStatus}
+            onRetry={(fileType) => {
+              toast({
+                title: "Retry Not Implemented",
+                description: "Retry functionality will be available in a future update.",
+                variant: "destructive"
+              });
+            }}
+          />
+        );
+
+      case 'complete':
+        return (
+          <ProcessingStatus
+            jobs={jobStatuses}
+            overall={overallStatus}
+            onContinueToAnalysis={() => {
+              toast({
+                title: "Analysis Coming Soon",
+                description: "Analysis features will be available in Phase 3.",
+              });
+            }}
+          />
         );
 
       default:
@@ -345,6 +392,7 @@ export function UploadWizard() {
       case 'upload': return 'Upload Files';
       case 'mapping': return 'Field Mapping';
       case 'processing': return 'Processing';
+      case 'complete': return 'Complete';
       default: return 'Upload Wizard';
     }
   };
@@ -360,7 +408,7 @@ export function UploadWizard() {
         <div className="max-w-md mx-auto space-y-2">
           <Progress value={getStepProgress()} className="w-full" />
           <p className="text-sm text-muted-foreground">
-            Step {['checklist', 'upload', 'mapping', 'processing'].indexOf(currentStep) + 1} of 4: {getStepTitle()}
+            Step {['checklist', 'upload', 'mapping', 'processing', 'complete'].indexOf(currentStep) + 1} of 5: {getStepTitle()}
           </p>
         </div>
       </div>
