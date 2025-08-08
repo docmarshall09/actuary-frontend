@@ -57,6 +57,20 @@ export const apiService = {
     return response.json();
   },
 
+  async uploadAppendFile(uploadId: string, fileType: string, file: File): Promise<void> {
+    const formData = new FormData();
+    formData.append(fileType, file);
+
+    const response = await fetch(`${API_BASE_URL}/api/upload_append/${uploadId}`, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!response.ok) {
+      throw new Error(`File append failed: ${response.statusText}`);
+    }
+  },
+
   async detectFields(uploadId: string, fileType: string): Promise<DetectionResponse[]> {
     const response = await fetch(`${API_BASE_URL}/api/detect/${uploadId}/${fileType}`, {
       method: 'POST',

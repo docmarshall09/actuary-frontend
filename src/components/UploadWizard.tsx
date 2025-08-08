@@ -110,12 +110,12 @@ export function UploadWizard() {
     });
 
     try {
-      // Upload file if we don't have an upload_id yet, or if this is the first file
-      if (!uploadId) {
-        setUploadedFiles(prev => 
-          prev.map(f => f.id === newFile.id ? { ...f, status: 'processing' } : f)
-        );
+      setUploadedFiles(prev => 
+        prev.map(f => f.id === newFile.id ? { ...f, status: 'processing' } : f)
+      );
 
+      if (!uploadId) {
+        // First file upload - use regular upload endpoint
         const uploadFiles: { [key: string]: File } = {};
         uploadFiles[fileType] = file;
         
@@ -137,18 +137,11 @@ export function UploadWizard() {
           )
         );
       } else {
-        // For subsequent files, upload individually
-        setUploadedFiles(prev => 
-          prev.map(f => f.id === newFile.id ? { ...f, status: 'processing' } : f)
-        );
-
-        const uploadFiles: { [key: string]: File } = {};
-        uploadFiles[fileType] = file;
-        
-        const response = await apiService.uploadFiles(uploadFiles);
+        // Subsequent files - use upload_append endpoint
+        await apiService.uploadAppendFile(uploadId, fileType, file);
         
         // Get field detection for this file
-        const detections = await apiService.detectFields(response.upload_id, fileType);
+        const detections = await apiService.detectFields(uploadId, fileType);
         
         setUploadedFiles(prev => 
           prev.map(f => 
