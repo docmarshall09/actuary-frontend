@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { PreUploadChecklist } from './PreUploadChecklist';
 import { FileUploadZone } from './FileUploadZone';
-import { MappingWizard } from './MappingWizard';
+import { SimpleMappingWizard } from './SimpleMappingWizard';
 import { FilePreviewModal } from './FilePreviewModal';
 import { useToast } from '@/hooks/use-toast';
 import { apiService } from '@/services/api';
@@ -300,7 +300,7 @@ export function UploadWizard() {
       case 'mapping':
         return (
           <div className="space-y-6">
-            <MappingWizard 
+            <SimpleMappingWizard 
               uploadedFiles={uploadedFiles}
               uploadId={uploadId}
               onComplete={(mappings) => {
